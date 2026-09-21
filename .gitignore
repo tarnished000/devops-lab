@@ -1,0 +1,18 @@
+*.log
+.env
+__pycache__/
+
+# Ansible secrets (create locally with ansible-vault, never commit)
+ansible/group_vars/all/vault.yml
+*.retry
+
+# Python
+__pycache__/
+*.pyc
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
