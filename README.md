@@ -1,87 +1,62 @@
 # devops-lab
 
-Учебный DevOps pet-проект: документирую путь от системного/сетевого администратора к DevOps-инженеру — по шагам, с реальным прогрессом и открытым статусом на каждом этапе.
+Personal learning repo for a Linux/sysadmin → DevOps transition. See
+`CLAUDE.md` for the full context (goals, target architecture, how I'm
+using it day to day).
 
-## Обо мне
+The app itself is a small FastAPI + PostgreSQL "notes" CRUD API
+(`app/`), deliberately simple — it exists to be the thing the rest of
+this repo deploys, monitors and automates, not to be interesting on its
+own.
 
-Системный и сетевой администратор с коммерческим опытом (~2 года), сейчас перехожу в DevOps/SRE/Platform Engineering. Этот репозиторий — не готовый продакшн-проект, а рабочий журнал обучения: то, что отмечено как «готово», я реально сделал руками; то, что «в процессе» или «запланировано» — ещё предстоит.
+> This GitHub copy mirrors the primary development repo (GitLab). Its
+> CI/CD is ported to GitHub Actions + GitHub Container Registry (ghcr.io)
+> instead of GitLab CI + GitLab Registry, so the pipeline here runs
+> natively on GitHub.
 
-## Метод обучения
+## Status by stage
 
-20% теория / 70% практика / 10% фиксация знаний. Цикл на каждую тему:
+| Stage | Status |
+| --- | --- |
+| Docker (app + nginx + Postgres) | Written. Not yet run end-to-end against a live Docker daemon on my side — please `docker compose up -d --build` and sanity-check before trusting it. |
+| GitHub Actions CI/CD + Container Registry | Written (`.github/workflows/ci.yml`: pytest against a Postgres service, then build+push to `ghcr.io` using the built-in `GITHUB_TOKEN`, no manual account verification needed). See the Actions tab for the latest run. |
+| Ansible | Written (`ansible/`: Docker install, ufw firewall, app deploy roles). Not yet applied — there's no server to target yet; `inventory.ini` is a placeholder until Terraform provisions one. |
+| Kubernetes + Argo CD (GitOps) | Written (`k8s/`, `argocd/`). Not yet applied — no cluster exists yet. Kustomize-structured, meant to be picked up by Terraform's output once there's somewhere to run it. |
+| Terraform (Yandex Cloud) | Written (`terraform/`). Not yet applied — provisioning needs a real Yandex Cloud account with billing and my own IAM token, which has to happen from outside this environment, by hand. |
+| Monitoring (Prometheus/Grafana/Alertmanager) | Wired into `docker-compose.yml` and into the app itself (`/metrics`). Same caveat as Docker: written and internally consistent, not yet watched running live. |
 
-```
-учу → делаю → ломаю → диагностирую → чиню → коммичу → документирую
-```
+Short version: everything is real, working-quality code, not stubs —
+but several stages need something only a human can do (pay for and
+provision real cloud infrastructure) before they've actually been *run*,
+as opposed to *written*. I'm not going to claim a stage is done just
+because the code for it exists.
 
-## Целевая архитектура
-
-```
-                    GitLab
-                       │
-                       ▼
-                 GitLab CI/CD
-                       │
-              ┌────────┴────────┐
-              ▼                 ▼
-          Tests/Lint        Docker build
-                                │
-                                ▼
-                         Container Registry
-                                │
-                                ▼
-                             ArgoCD
-                                │
-                                ▼
-                           Kubernetes
-                                │
-                ┌───────────────┼─────────────┐
-                ▼               ▼             ▼
-              Nginx           App          PostgreSQL
-
-
-Terraform ─────► Infrastructure
-Ansible ───────► Configuration
-Prometheus ────► Metrics
-Grafana ───────► Dashboards
-Alertmanager ──► Alerts
-```
-
-## Прогресс по roadmap
-
-| # | Этап | Статус |
-|---|------|--------|
-| 0–1 | Linux / Git / Bash | 🟡 В процессе |
-| 2 | Docker + Docker Compose | ⚪ Запланировано |
-| 3 | GitLab CI/CD | ⚪ Запланировано |
-| 4 | Ansible | ⚪ Запланировано |
-| 5 | Monitoring (Prometheus/Grafana/Alertmanager) | ⚪ Запланировано |
-| 6–7 | Kubernetes | ⚪ Запланировано |
-| 7.5 | Helm | ⚪ Запланировано |
-| 8 | ArgoCD | ⚪ Запланировано |
-| 9 | Terraform + Yandex Cloud | ⚪ Запланировано |
-| 10 | Финализация, сборка всего стека | ⚪ Запланировано |
-
-Что реально сделано на этапе 0–1: локальный и удалённый (GitLab) репозиторий, SSH-аутентификация, основные команды Git (status/add/commit/push/pull, ветки, merge, `.gitignore`), осознанно разобран и разрешён merge-конфликт. Осталось: stash, revert/reset, rebase.
-
-## Структура репозитория
+## Layout
 
 ```
-devops-lab/
-├── app/          — демо-приложение (груз для доставки, не цель обучения)
-├── docker/       — Dockerfile, docker-compose
-├── ansible/      — inventory, roles, playbooks
-├── terraform/    — инфраструктура (Yandex Cloud)
-├── kubernetes/   — манифесты
-├── helm/         — Helm chart приложения
-├── argocd/       — GitOps-конфигурация
-├── monitoring/   — Prometheus, Grafana, Alertmanager
-├── scripts/      — bash/python-утилиты
-└── docs/         — архитектура, troubleshooting, заметки по методу «сломал → починил»
+app/            FastAPI + SQLAlchemy "notes" API, Dockerfile, tests
+nginx/          Reverse proxy config for the app
+ansible/        Server configuration (Docker, firewall, app deploy)
+k8s/            Kustomize manifests for the app + Postgres
+argocd/         Argo CD Application (GitOps sync of k8s/)
+terraform/      Yandex Cloud infrastructure (VPC, VM)
+monitoring/     Prometheus, Alertmanager, Grafana provisioning
+docker-compose.yml            Local stack: app + db + nginx + monitoring
+.github/workflows/ci.yml      CI: test, then build + push image to ghcr.io
 ```
 
-В каждой папке — свой README со статусом и кратким описанием того, что туда войдёт.
+## Running it locally
 
-## Почему стоит на это смотреть
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
 
-Это открытый учебный журнал, а не заявление о готовом стеке. Каждый раздел обновляется по мере реального прохождения — от Docker до Terraform — с заметками о том, что сломалось и как это было диагностировано и исправлено.
+- App (via nginx): http://localhost:8080
+- Prometheus: http://localhost:9090
+- Alertmanager: http://localhost:9093
+- Grafana: http://localhost:3000
+
+Each stage's own README (`ansible/README.md`, `k8s/README.md`,
+`terraform/README.md`, `monitoring/README.md`) has the details and the
+exact commands for that stage.
