@@ -1,35 +1,96 @@
 # devops-lab
 
-Personal learning repo for a Linux/sysadmin → DevOps transition. See
-`CLAUDE.md` for the full context (goals, target architecture, how I'm
-using it day to day).
+[![CI](https://github.com/tarnished000/devops-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/tarnished000/devops-lab/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](app/requirements.txt)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](app/Dockerfile)
 
-The app itself is a small FastAPI + PostgreSQL "notes" CRUD API
-(`app/`), deliberately simple — it exists to be the thing the rest of
-this repo deploys, monitors and automates, not to be interesting on its
-own.
+A personal, production-style DevOps lab I built to go from Linux/sysadmin
+work into DevOps: a small FastAPI + PostgreSQL app, wrapped end to end in
+the tooling a real deployment would use — Docker, CI/CD, configuration
+management, GitOps on Kubernetes, and infrastructure as code, with
+monitoring wired in throughout.
 
-> This GitHub copy mirrors the primary development repo (GitLab). Its
-> CI/CD is ported to GitHub Actions + GitHub Container Registry (ghcr.io)
-> instead of GitLab CI + GitLab Registry, so the pipeline here runs
-> natively on GitHub.
+The app itself (`app/`) is deliberately simple: a "notes" CRUD API. It's
+not meant to be interesting on its own — it exists to be the thing the
+rest of the repo builds, deploys, monitors, and automates.
+
+> This GitHub copy mirrors my primary development repo (GitLab). CI/CD
+> here runs on GitHub Actions + GitHub Container Registry (`ghcr.io`)
+> instead of GitLab CI + the GitLab Registry, so the pipeline is native
+> to GitHub rather than just copied over.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph CI["GitHub Actions"]
+        test["test: pytest + Postgres service"]
+        build["build: docker build & push"]
+        test --> build
+    end
+
+    build -- "push" --> ghcr[("ghcr.io\nimage registry")]
+
+    subgraph GitOps["Kubernetes + Argo CD"]
+        argocd["Argo CD"]
+        deploy["app Deployment (2 replicas)"]
+        db[("Postgres\nStatefulSet")]
+        argocd -- "sync k8s/base" --> deploy
+        deploy --> db
+    end
+
+    ghcr -. "image ref" .-> deploy
+
+    subgraph Infra["Terraform (Yandex Cloud)"]
+        vm["Compute VM"]
+    end
+
+    subgraph Config["Ansible"]
+        ansible["Docker + firewall + app deploy"]
+    end
+
+    vm --> ansible
+    ansible --> compose["docker compose stack"]
+
+    subgraph Observability["Monitoring"]
+        prom["Prometheus"]
+        graf["Grafana"]
+        alert["Alertmanager"]
+        prom --> graf
+        prom --> alert
+    end
+
+    deploy -. "/metrics" .-> prom
+    compose -. "/metrics" .-> prom
+```
+
+## Tech stack
+
+- **App**: Python 3.12, FastAPI, SQLAlchemy, PostgreSQL 16
+- **Containers**: Docker, Docker Compose, nginx (reverse proxy)
+- **CI/CD**: GitHub Actions, GitHub Container Registry (ghcr.io)
+- **Config management**: Ansible (Docker install, firewall, app deploy roles)
+- **Orchestration / GitOps**: Kubernetes (Kustomize), Argo CD
+- **Infrastructure as code**: Terraform, Yandex Cloud
+- **Monitoring**: Prometheus, Grafana, Alertmanager
 
 ## Status by stage
 
+I'd rather this table be accurate than impressive. Every stage below is
+real, working-quality code — not stubs — but a few of them need
+something only I can do by hand outside of CI (mainly: pay for and
+provision real cloud infrastructure) before they've actually been *run*,
+as opposed to just *written*.
+
 | Stage | Status |
 | --- | --- |
-| Docker (app + nginx + Postgres) | Written. Not yet run end-to-end against a live Docker daemon on my side — please `docker compose up -d --build` and sanity-check before trusting it. |
-| GitHub Actions CI/CD + Container Registry | Written (`.github/workflows/ci.yml`: pytest against a Postgres service, then build+push to `ghcr.io` using the built-in `GITHUB_TOKEN`, no manual account verification needed). See the Actions tab for the latest run. |
+| Docker (app + nginx + Postgres) | Written. Run it yourself with `docker compose up -d --build` — see Quickstart below. |
+| CI/CD (GitHub Actions + ghcr.io) | **Running.** Every push tests against a real Postgres service, then builds and pushes the image to `ghcr.io` using the built-in `GITHUB_TOKEN` — no manual setup needed. See the badge above or the [Actions tab](https://github.com/tarnished000/devops-lab/actions). |
 | Ansible | Written (`ansible/`: Docker install, ufw firewall, app deploy roles). Not yet applied — there's no server to target yet; `inventory.ini` is a placeholder until Terraform provisions one. |
-| Kubernetes + Argo CD (GitOps) | Written (`k8s/`, `argocd/`). Not yet applied — no cluster exists yet. Kustomize-structured, meant to be picked up by Terraform's output once there's somewhere to run it. |
-| Terraform (Yandex Cloud) | Written (`terraform/`). Not yet applied — provisioning needs a real Yandex Cloud account with billing and my own IAM token, which has to happen from outside this environment, by hand. |
+| Kubernetes + Argo CD (GitOps) | Written (`k8s/`, `argocd/`), Kustomize-valid. Not yet applied — no cluster exists yet; it's meant to be pointed at whatever Terraform provisions. |
+| Terraform (Yandex Cloud) | Written (`terraform/`). Not yet applied — provisioning needs a real Yandex Cloud account with billing and a personal IAM token, done by hand from outside CI. |
 | Monitoring (Prometheus/Grafana/Alertmanager) | Wired into `docker-compose.yml` and into the app itself (`/metrics`). Same caveat as Docker: written and internally consistent, not yet watched running live. |
-
-Short version: everything is real, working-quality code, not stubs —
-but several stages need something only a human can do (pay for and
-provision real cloud infrastructure) before they've actually been *run*,
-as opposed to *written*. I'm not going to claim a stage is done just
-because the code for it exists.
 
 ## Layout
 
@@ -45,9 +106,11 @@ docker-compose.yml            Local stack: app + db + nginx + monitoring
 .github/workflows/ci.yml      CI: test, then build + push image to ghcr.io
 ```
 
-## Running it locally
+## Quickstart
 
 ```bash
+git clone https://github.com/tarnished000/devops-lab.git
+cd devops-lab
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -57,6 +120,11 @@ docker compose up -d --build
 - Alertmanager: http://localhost:9093
 - Grafana: http://localhost:3000
 
-Each stage's own README (`ansible/README.md`, `k8s/README.md`,
-`terraform/README.md`, `monitoring/README.md`) has the details and the
-exact commands for that stage.
+Each stage has its own README with the full details and exact commands:
+[`ansible/README.md`](ansible/README.md), [`k8s/README.md`](k8s/README.md),
+[`terraform/README.md`](terraform/README.md),
+[`monitoring/README.md`](monitoring/README.md).
+
+## License
+
+[MIT](LICENSE)
