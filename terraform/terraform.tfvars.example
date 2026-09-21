@@ -1,0 +1,6 @@
+cloud_id  = "b1gxxxxxxxxxxxxxxxxx"
+folder_id = "b1gyyyyyyyyyyyyyyyyy"
+zone      = "ru-central1-a"
+
+# yc_token is a secret — do NOT put it here.
+# Pass it via: export TF_VAR_yc_token=$(yc iam create-token)
