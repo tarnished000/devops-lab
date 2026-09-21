@@ -1,0 +1,23 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default
+    # No real notification channel wired up yet. To send alerts somewhere,
+    # replace this with e.g. a webhook or Telegram receiver:
+    #
+    # - name: default
+    #   webhook_configs:
+    #     - url: https://example.invalid/alertmanager-webhook
+
+inhibit_rules:
+  - source_matchers: ["severity = critical"]
+    target_matchers: ["severity = warning"]
+    equal: ["alertname"]
