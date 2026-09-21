@@ -1,0 +1,10 @@
+---
+app_user: deploy
+app_dir: /opt/notes-app
+repo_url: git@github.com:tarnished000/devops-lab.git
+
+postgres_user: notes
+postgres_db: notes
+# postgres_password is a secret: define it in an ansible-vault-encrypted
+# group_vars/all/vault.yml as vault_postgres_password (see ansible/README.md).
+postgres_password: "{{ vault_postgres_password }}"
